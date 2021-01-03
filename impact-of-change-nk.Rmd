@@ -1,0 +1,169 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Get data from files / R data stores
+```{r}
+rm(list=ls()) # start clean
+acci <- read.csv('../data/Unfallorte2019_LinRef_with_AGS.csv', sep=';')
+streets <- readRDS('../data/overpass-berlin-streets.Rds')
+small_streets <- readRDS('../data/overpass-berlin-small-streets.Rds')
+```
+
+```{r}
+#install the osmdata, sf, tidyverse and ggmap package
+if(!require("osmdata")) install.packages("osmdata")
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("sf")) install.packages("sf")
+library(tidyverse)
+library(osmdata)
+library(sf)
+```
+Karl-Marx-Straße in Neukölln, from Hermannplatz to Grenzallee
+```{r}
+# bounding box
+left<-13.4231
+#left<- 13.443
+right<-13.4449
+#right<- 13.445
+bottom<-52.4635
+#bottom<- 52.49
+top<-52.4870
+#top=52.5
+acci_1 <- acci %>% 
+  filter(XGCSWGS84 > left) %>% 
+  filter(XGCSWGS84 < right) %>% 
+  filter(YGCSWGS84 > bottom) %>% 
+  filter(YGCSWGS84 < top) %>% 
+  st_as_sf( coords=c('XGCSWGS84','YGCSWGS84'), crs=4326, remove=FALSE)
+# crs 3055 better for measurements / distances than the previous 4326 (I have no idea why...)
+print(length(acci_1))
+poa <- acci_1 %>% 
+  dplyr::select(XGCSWGS84 , YGCSWGS84) %>% 
+  rename( X= XGCSWGS84 , Y= YGCSWGS84)
+```
+```{r}
+#look_for_list = c('Karl-Marx-Straße', 'Karl-Marx-Strasse' , 'Karl Marx Straße', 'Karl Marx Straße')
+focus_street = 'Karl-Marx-Straße'
+surrounding = c('Donaustraße', 'Sonnenallee','Flughafenstraße', 'Hermannstraße','Erkstraße', 'Weichselstraße')
+look_for_list= c(focus_street, surrounding)
+#look_for = 'Karl-Marx-Straße'
+idx <- which(streets$osm_lines$name %in% look_for_list)
+print('streets, orange')
+print(idx)
+if (length(idx)!=0){
+  streets_lines <- streets$osm_lines$geometry[idx]
+  plot(streets_lines, col='orange',xlim=c(left, right) , ylim=c(bottom,top))} else print('empty, nothing to plot, orange.')
+
+idx1 <- which(small_streets$osm_lines$name %in% look_for_list)
+print('small streets, blue')
+print(idx1)
+if (length(idx1)!=0){
+  small_streets_lines <- small_streets$osm_lines$geometry[idx1]
+  plot(small_streets_lines, col='blue',xlim=c(left, right) , ylim=c(bottom,top))} else print('empty, nothing to plot, blue.')
+  
+route <- as.list(c(streets_lines, small_streets_lines))
+print(route, col='black')
+
+#route <- st_transform(route, 3055)
+route <- st_cast(route, 'MULTILINESTRING')
+route <- st_cast(route, 'LINESTRING')
+plot(route, col='purple', xlim=c(left, right) , ylim=c(bottom,top))
+axis(1)
+axis(2)
+```
+```{r}
+#install.packages("lwgeom")
+library(lwgeom)
+#st_crs(acci_nk)
+d <- data.frame(st_distance(acci_1, route))
+d['min'] = apply(X=d, MARGIN=1 , FUN=min)
+d['OBJECTID'] = acci_1['OBJECTID']
+
+d2 <- d %>% filter(min<500) %>% dplyr::select(OBJECTID,min)
+```
+There are relatively few accidents on Karl-Marx-Straße, compared to Sonnenallee and Hermannstraße
+```{r fig.height=10, fig.width=6}
+#class(d2)
+#class(acci_1)
+acci_2 <- merge(d2, acci_1, by='OBJECTID', all.x=TRUE)  %>% 
+  st_as_sf( coords=c('XGCSWGS84','YGCSWGS84'), crs=4326, remove=FALSE)
+#class(acci_2)
+plot(c(acci_2$geometry, route), xlim=c(left, right) , ylim=c(bottom,top))
+
+```
+```{r  fig.height=10, fig.width=6}
+plot(acci_2['IstPKW'], xlim=c(left, right) , ylim=c(bottom,top))
+plot(route, add=TRUE)
+#axis(1)
+#axis(2)
+```
+
+```{r  fig.height=10, fig.width=6}
+acci_2 %>% filter(IstRad==1) %>%
+  dplyr::select('UMONAT') %>%
+  plot()
+
+#plot(c(acci_2$geometry, route), xlim=c(left, right) , ylim=c(bottom,top))
+#axis(1)
+#axis(2)
+```
+Karl-Marx-Straße in Neukölln, from Hermannplatz to Weichselstraße
+```{r}
+# bounding box
+left<-13.42425
+#left<- 13.443
+right<-13.43170
+#right<- 13.445
+bottom<-52.48305
+#bottom<- 52.49
+top<-52.48647
+#top=52.5
+acci_3 <- acci %>% 
+  filter(XGCSWGS84 > left) %>% 
+  filter(XGCSWGS84 < right) %>% 
+  filter(YGCSWGS84 > bottom) %>% 
+  filter(YGCSWGS84 < top) %>% 
+  st_as_sf( coords=c('XGCSWGS84','YGCSWGS84'), crs=4326, remove=FALSE)
+# crs 3055 better for measurements / distances than the previous 4326 (I have no idea why...)
+print(length(acci_3))
+poa_3 <- acci_3 %>% 
+  dplyr::select(XGCSWGS84 , YGCSWGS84) %>% 
+  rename( X= XGCSWGS84 , Y= YGCSWGS84)
+```
+```{r}
+focus_street = 'Karl-Marx-Straße'
+idx2 <- which(streets$osm_lines$name == focus_street)
+streets_lines <- streets$osm_lines$geometry[idx2]
+route <- as.list(streets_lines)
+print(route, col='black')
+
+#route <- st_transform(route, 3055)
+route <- st_cast(route, 'MULTILINESTRING')
+route <- st_cast(route, 'LINESTRING')
+plot(route, col='purple', xlim=c(left, right) , ylim=c(bottom,top))
+axis(1)
+axis(2)
+```
+```{r}
+d <- data.frame(st_distance(acci_3, route))
+d['min'] = apply(X=d, MARGIN=1 , FUN=min)
+d['OBJECTID'] = acci_3['OBJECTID']
+
+d3 <- d %>% filter(min<5) %>% dplyr::select(OBJECTID,min)
+
+acci_3 <- merge(d3, acci_3, by='OBJECTID', all.x=TRUE)  %>% 
+  st_as_sf( coords=c('XGCSWGS84','YGCSWGS84'), crs=4326, remove=FALSE)
+#class(acci_2)
+plot(c(acci_3$geometry, route), xlim=c(left, right) , ylim=c(bottom,top))
+```
+
+```{r  fig.height=10, fig.width=6}
+a3 <- acci_3 %>%
+  dplyr::select('IstFuss','IstPKW','IstRad','UMONAT','USTUNDE','ULICHTVERH','STRZUSTAND','UKATEGORIE','UTYP1')
+plot(c(a3$geometry,route) , xlim=c(left, right), ylim=c(bottom,top))
+#plot(route, add=TRUE)
+#axis(1)
+#axis(2)
+```
