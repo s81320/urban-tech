@@ -1,0 +1,209 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# compare Berlin Hot Spots
+This is about the month in which accidents happen.
+We should look into The distribution of accidents over the month of the year (maybe for Berlin, not for all of Germany)
+
+Barcharts are OK, because they are simple.
+
+I should have the line for Berlin in the barchart for the hot spots, not the single hot spot but the barchart summed over all hot spots.
+
+I have tried to calculate a medium month for each hot spot, and to put it in the barcharts for the individual hot spot. But my linear transformation is not working correctly.
+
+```{r}
+#install the osmdata, sf, tidyverse and ggmap package
+if(!require("osmdata")) install.packages("osmdata")
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("sf")) install.packages("sf")
+library(tidyverse)
+library(osmdata)
+library(sf)
+```
+
+```{r}
+# laptop
+rm(list=ls())
+setwd("~/Documents/ds/sem3/Felix/transport/mycode/data-visualisation/streets")
+acci <- read.csv('../../data/Unfallorte2019_LinRef_with_AGS.csv', sep=';')
+hot_spots <- read.csv('../../data/berlin-hotspots.csv', sep=',')
+```
+
+```{r}
+streets <- readRDS('../../data/overpass-berlin-streets.Rds')
+small_streets <- readRDS('../../data/overpass-berlin-small-streets.Rds')
+```
+
+```{r}
+dfMo <- data.frame()
+dfMonth <- data.frame()
+```
+
+```{r}
+accib <- acci %>% dplyr::filter(ULAND==11) %>% 
+  select('UMONAT') %>%
+  table()
+x <- barplot(accib/accib[6])
+#p <- plot(accib, type='l', col='blue')
+#print(p)
+lines(x=x, y=accib/accib[6],type='l',col='blue')
+```
+
+```{r}
+res = 0.001
+for (i in 1:5) {
+  print(i)
+# data from csv
+  lat <- hot_spots$lat[i]
+  #print(lat)
+  lon <- hot_spots$long[i]
+  #print(lon)
+xleft = lat -res
+xright = lat + res
+ybottom = lon - res
+ytop = lon + res
+xlim=c(xleft,xright)
+ylim=c(ybottom,ytop)
+# accidents in hotspot window
+acci_hot_spots<- list()
+a1 <- acci %>% filter(XGCSWGS84 > xleft) %>% 
+  filter(XGCSWGS84 < xright) %>% 
+  filter(YGCSWGS84 > ybottom) %>% 
+  filter(YGCSWGS84 < ytop)
+# write as csv
+write.csv(a1,paste('hotspot',i,'.csv',sep=''))
+poa <- a1 %>% select(XGCSWGS84 , YGCSWGS84) %>% 
+  rename( X= XGCSWGS84 , Y= YGCSWGS84)
+acci_hot_spots[i] <- a1
+# create image / plot
+p<- ggplot() +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black",
+          size = .4,
+          alpha = .8)  +
+  geom_sf(data = small_streets$osm_lines,
+          inherit.aes = FALSE,
+          #color = "#ffbe7f",
+          color='orange',
+          size = .2,
+          alpha = .6) +
+  geom_point(data = poa, 
+             aes(x=X, y=Y), 
+             color='red', 
+             size=.2, 
+             alpha=.7)+
+  coord_sf(xlim = xlim, 
+           ylim = ylim,
+           expand = FALSE)
+# save image / plot
+png(paste('hotspot',i,'.png',sep=''))
+print(p)
+dev.off()
+}
+
+```
+Do statistics for the hotspots
+```{r}
+mid_month <- list() 
+# boxplot(dfMonth[2:6]) # this is not what I want.
+for (i in 2:6){
+  a <- 0
+  for (j in 1:12) {
+    a <- a + dfMonth[j,i]*j
+    #print(a)
+  }
+  #print(i)
+  print(a/sum(dfMonth[,paste(i-1)]))
+  mid_month[i-1] <- a/sum(dfMonth[,paste(i-1)])
+}
+ a <- 0
+  for (j in 1:12) {
+    a <- a + dfMonth[j,'summed']*j
+  }
+ print(a/sum(dfMonth[,'summed']))
+ mid_month[6]<- a/sum(dfMonth[,'summed'])
+```
+
+````{r}
+dfMonth <- data.frame(x=rep(0,times=12))
+for (i in 1:5){
+#print(i)
+a1 <- read.csv(paste('hotspot',i,'.csv',sep=''))
+dfm <- data.frame(a=rep(0,times=12))
+n<-nrow(a1)
+for (j in 0:n){
+  #print(j)
+  dfm[a1[j,'UMONAT'],'a'] <-   dfm[a1[j,'UMONAT'],'a']+1 }
+dfMonth[paste(i)] <- dfm[,'a']
+}
+```
+
+```{r fig.height=3, fig.width=4}
+lin_trans <- function (x,a,b){return(x*(b-a))}
+
+for (i in 2:6) {
+#  print(dfMo[,i])
+  posi <- barplot(dfMonth[,i], ylim=c(0,5.3), main='accidents per month at Berlin hot spot')
+  #print(mid_month)
+  #print(posi[1]==0.7)
+  v <- 1.2*(mid_month[[i]]-1)
+  print(c(mid_month[[i]],v))
+    #(mid_month[[i-1]])*(posi[2,'V1']-posi[1,'V1'])
+  abline(v=v, lty='dashed')
+  abline(v=(posi[6]+posi[7])/2)
+  #abline(v=posi[6])
+}
+# this is not correct yet.
+```
+The mean value for the month shoul be transformed, because the middle is not at 6 but at posi[6]+posi[7])/2. More simple: 1->posi[1]=0.7 and 12->posi[12]=13.9
+
+So the mid_month has to be transformed to suit this.
+
+1 -> posi[1]
+2 -> posi[2]
+x ->  x * (posi[2]-posi[1]/(2-1) 
+
+
+```{r}
+for( i in 1:12){
+  #print(i)
+# print(sum(dfMo[paste(i),]))
+dfMonth[i,'summed'] <- as.numeric(sum(dfMonth[i,2:6]))
+}
+
+#dfMo[1,'summed']='bla'
+```
+
+```{r}
+#print(dfMo)
+barplot(dfMonth[,'summed'], ylim=c(0,12), main='Accidents per month summed over 5 hotspots')
+```
+Fazit: Month irrelevant for number of accidents at these 5 hot spots
+
+
+```{r fig.height=6, fig.width=10}
+#png(filename="plot1.png", width=200, height=300, bg="white")
+png(filename='small-multiple-hotspots-UMONAT.png', width=600 , height=300)
+par(mfrow=c(2,3))
+par(mar=c(0.5, 4.5, 2.5, 0.5))
+x<-barplot(dfMonth[,'summed'], ylim=c(0,12), main='summed accidents')
+lines(x=x, y=accib/accib[6]*11,type='l',col='blue')
+legend('bottomleft',
+       legend='Berlin, total, scaled', 
+       col='blue', 
+       pch='---',
+       bty='y',
+       text.col='blue')
+
+for (i in 2:6) {
+  par(mar=c(0.5, 4.5, 2.5, 0.5))
+  barplot(dfMonth[,i], ylim=c(0,12) , main = paste('hotspot',i-1))
+  }
+dev.off()
+
+```
+
+
+How could I represent this graphically? Just a vertical line at the computed value at the x-axis?

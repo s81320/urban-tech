@@ -1,0 +1,160 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# create small multiple of accidents by the hour of the day for the 5 hotspots
+
+
+```{r}
+#install the osmdata, sf, tidyverse and ggmap package
+if(!require("osmdata")) install.packages("osmdata")
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("sf")) install.packages("sf")
+library(tidyverse)
+library(osmdata)
+library(sf)
+```
+
+```{r}
+# laptop
+rm(list=ls())
+setwd("~/Documents/ds/sem3/Felix/transport/mycode/data-visualisation/streets")
+acci <- read.csv('../../data/Unfallorte2019_LinRef_with_AGS.csv', sep=';')
+hot_spots <- read.csv('../../data/berlin-hotspots.csv', sep=',')
+```
+
+```{r}
+streets <- readRDS('../../data/overpass-berlin-streets.Rds')
+small_streets <- readRDS('../../data/overpass-berlin-small-streets.Rds')
+```
+
+```{r}
+res = 0.001
+for (i in 1:5) {
+  print(i)
+# data from csv
+  lat <- hot_spots$lat[i]
+  #print(lat)
+  lon <- hot_spots$long[i]
+  #print(lon)
+xleft = lat -res
+xright = lat + res
+ybottom = lon - res
+ytop = lon + res
+xlim=c(xleft,xright)
+ylim=c(ybottom,ytop)
+# accidents in hotspot window
+acci_hot_spots<- list()
+a1 <- acci %>% filter(XGCSWGS84 > xleft) %>% 
+  filter(XGCSWGS84 < xright) %>% 
+  filter(YGCSWGS84 > ybottom) %>% 
+  filter(YGCSWGS84 < ytop)
+# write as csv
+write.csv(a1,paste('hotspot',i,'.csv',sep=''))
+poa <- a1 %>% select(XGCSWGS84 , YGCSWGS84) %>% 
+  rename( X= XGCSWGS84 , Y= YGCSWGS84)
+acci_hot_spots[i] <- a1
+# create image / plot
+p<- ggplot() +
+  geom_sf(data = streets$osm_lines,
+          inherit.aes = FALSE,
+          color = "black",
+          size = .4,
+          alpha = .8)  +
+  geom_sf(data = small_streets$osm_lines,
+          inherit.aes = FALSE,
+          #color = "#ffbe7f",
+          color='orange',
+          size = .2,
+          alpha = .6) +
+  geom_point(data = poa, 
+             aes(x=X, y=Y), 
+             color='red', 
+             size=.2, 
+             alpha=.7)+
+  coord_sf(xlim = xlim, 
+           ylim = ylim,
+           expand = FALSE)
+# save image / plot
+png(paste('hotspot',i,'.png'))
+print(p)
+dev.off()
+}
+
+```
+Do statistics for the hotspots
+````{r}
+dfHour <- data.frame(x=rep(0,times=24))
+for (i in 1:5){
+#print(i)
+a1 <- read.csv(paste('hotspot',i,'.csv',sep=''))
+dfm <- data.frame(a=rep(0,times=24))
+n<-nrow(a1)
+for (j in 0:n){
+  #print(j)
+  dfm[a1[j,'USTUNDE'],'a'] <-   dfm[a1[j,'USTUNDE'],'a']+1 }
+dfHour[paste(i)] <- dfm[,'a']
+}
+```
+
+```{r fig.height=3, fig.width=4}
+for (i in 2:6) {
+#  print(dfMo[,i])
+barplot(dfHour[,i], ylim=c(0,5.2), main='hour of accident at Berlin hot spot')}
+
+#par(new=TRUE)
+#barplot(dfMo$'2', ylim=c(0,2), col='green', axes=FALSE)
+#a1 %>% select(USTUNDE) %>% table() %>% barplot()
+#a1 %>% select(USTUNDE, IstPKW, IstFuss, IstRad) %>% barplot(USTUNDE ~IstPKW + IstFuss)
+#a1 %>% filter(IstPKW==1) 
+#mosaicplot(IstPKW~IstFuss, data = a1)
+```
+
+```{r}
+for( i in 1:24){
+# print(sum(dfMo[paste(i),]))
+dfHour[i,'summed'] <- as.numeric(sum(dfHour[i,2:6]))
+}
+
+```
+
+```{r}
+#print(dfMo)
+col <- rep('grey', times=24)
+col[8]<-'red'
+barplot(dfHour[,'summed'], ylim=c(0,12), main='Hours of accidents per summed over 5 hotspots',col=col)
+
+```
+Fazit: Month irrelevant for number of accidents at these 5 hot spots
+
+```{r fig.height=6, fig.width=10}
+#png(filename="plot1.png", width=200, height=300, bg="white")
+png(filename='small-multiple-hotspots-USTUNDE.png', width=600 , height=300)
+par(mfrow=c(2,3))
+par(mar=c(0.5, 4.5, 2.5, 0.5))
+col <- rep('grey', times=24)
+col[8]<-'red'
+barplot(dfHour[,'summed'], ylim=c(0,12), main='summed accidents',col=col)
+
+
+for (i in 2:6) {
+  par(mar=c(0.5, 4.5, 2.5, 0.5))
+  barplot(dfHour[,i], ylim=c(0,12) , main = paste('hotspot',i-1))
+  }
+dev.off()
+
+```
+
+```{r}
+#barplot(table(a1$UMONAT))
+#df <- data.frame(x=c(1:5),y=c(3:7))
+dfb <- data.frame(x=rep(0,12))
+df <- data.frame(x=rep(0,times=12),y=rep(c(0,2),times=6))
+print(df)
+#barplot(df$x, ylim=c(0,4))
+#par(new=TRUE)
+barplot(df$y, col='red',ylim=c(0,4), axes=FALSE)
+#par(new=TRUE)
+#barplot(df$y, ylim=c(0,4), col='blue')
+```
+
